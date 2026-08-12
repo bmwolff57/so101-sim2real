@@ -1,0 +1,19 @@
+[project]
+name = "so101-sim2real"
+version = "0.1.0"
+description = "Sim-to-real reinforcement learning for the SO-101 arm."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "huggingface-hub",
+    "mujoco",
+    "mujoco-mjx",
+]
+
+[project.optional-dependencies]
+teleop = [
+    "lerobot",
+]
+
+[tool.uv]
+package = false
