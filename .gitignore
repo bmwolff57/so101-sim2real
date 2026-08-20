@@ -8,3 +8,4 @@ checkpoints/
 .venv-*/
 venvs/
 .env
+*.png

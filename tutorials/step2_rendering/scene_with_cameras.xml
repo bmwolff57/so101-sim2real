@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<!-- Tutorial-only copy of sim/scene_cube_tub.xml. The production scene is untouched. -->
+<mujoco model="so101_scene_cube_tub_with_cameras">
+  <include file="../../sim/so101_new_calib.xml"/>
+
+  <!-- The included robot declares mesh file names; this tutorial copy lives two
+       directories below the project root, so point those names at sim/assets. -->
+  <compiler meshdir="../../sim/assets"/>
+
+  <option timestep="0.002" iterations="4" ls_iterations="8" integrator="implicitfast">
+    <flag eulerdamp="disable"/>
+  </option>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0"/>
+    <global azimuth="120" elevation="-20" offwidth="640" offheight="480"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="256" height="1536"/>
+    <material name="table_mat" rgba="0.85 0.75 0.60 1"/>
+    <material name="tub_mat" rgba="0.35 0.35 0.35 1"/>
+    <material name="cube_mat" rgba="0.90 0.12 0.12 1"/>
+  </asset>
+
+  <worldbody>
+    <light name="key" pos="0.3 0.3 1.0" dir="-0.3 -0.3 -1"
+           diffuse="0.8 0.8 0.8" specular="0.3 0.3 0.3"/>
+
+    <!-- A placeholder camera gets attached to the existing gripper body in 08. -->
+    <camera name="wrist_camera" pos="0 0 0" fovy="81"/>
+
+    <!-- At x=0.2, y=0, z=0.6, looking straight down at the workspace. -->
+    <camera name="overhead_camera" pos="0.2 0 0.6" xyaxes="1 0 0 0 1 0" fovy="43"/>
+
+    <geom name="table" type="box" size="0.40 0.30 0.010"
+          pos="0.10 0.00 -0.011" material="table_mat"/>
+
+    <body name="cube" pos="0.22 0.00 0.021">
+      <freejoint name="cube_free"/>
+      <inertial pos="0 0 0" mass="0.020" diaginertia="5.33e-6 5.33e-6 5.33e-6"/>
+      <geom name="cube_geom" type="box" size="0.020 0.020 0.020" material="cube_mat"
+            friction="1.0 0.02 0.005" solref="0.005 1" solimp="0.9 0.95 0.001"/>
+    </body>
+
+    <body name="tub" pos="0.28 0.15 0.0">
+      <geom name="tub_floor" type="box" size="0.068 0.068 0.002" pos="0 0 0.002" material="tub_mat"/>
+      <geom name="tub_wall_px" type="box" size="0.002 0.068 0.025" pos="0.066 0 0.027" material="tub_mat"/>
+      <geom name="tub_wall_nx" type="box" size="0.002 0.068 0.025" pos="-0.066 0 0.027" material="tub_mat"/>
+      <geom name="tub_wall_py" type="box" size="0.070 0.002 0.025" pos="0 0.066 0.027" material="tub_mat"/>
+      <geom name="tub_wall_ny" type="box" size="0.070 0.002 0.025" pos="0 -0.066 0.027" material="tub_mat"/>
+    </body>
+  </worldbody>
+</mujoco>
