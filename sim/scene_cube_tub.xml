@@ -1,6 +1,8 @@
 <?xml version="1.0"?>
 <mujoco model="so101_scene_cube_tub">
-  <include file="so101_new_calib.xml"/>
+  <!-- Using derivative XML to add wrist camera to gripper body.
+       See so101_new_calib_with_wrist_camera.xml header for details. -->
+  <include file="so101_new_calib_with_wrist_camera.xml"/>
 
   <option timestep="0.002" iterations="4" ls_iterations="8" integrator="implicitfast">
     <flag eulerdamp="disable"/>
@@ -21,6 +23,8 @@
   <worldbody>
     <light name="key" pos="0.3 0.3 1.0" dir="-0.3 -0.3 -1"
            diffuse="0.8 0.8 0.8" specular="0.3 0.3 0.3"/>
+
+    <camera name="overhead" fovy="43" pos="0.15 0 0.6" xyaxes="1 0 0 0 1 0"/>
 
     <!-- Table: top surface at z=0.  size = half-extents.
          TUNE table size to your desk footprint; z offset keeps base clear of mesh. -->
