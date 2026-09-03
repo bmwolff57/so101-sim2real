@@ -31,12 +31,12 @@
     <geom name="table" type="box" size="0.40 0.30 0.010"
           pos="0.10 0.00 -0.011" material="table_mat"/>
 
-    <!-- Cube: placeholder 40 mm, 20 g.  TUNE size + mass to weighed real cube.
+    <!-- Cube: 40 mm edge; 34.5 g mean of the two measured physical cubes.
          Diagonal inertia = (1/6) m s^2 for a uniform cube. -->
     <body name="cube" pos="0.22 0.00 0.021">
       <freejoint name="cube_free"/>
-      <inertial pos="0 0 0" mass="0.020"
-                diaginertia="5.33e-6 5.33e-6 5.33e-6"/>
+      <inertial pos="0 0 0" mass="0.0345"
+                diaginertia="9.2e-6 9.2e-6 9.2e-6"/>
       <geom name="cube_geom" type="box" size="0.020 0.020 0.020"
             material="cube_mat"
             friction="1.0 0.02 0.005"

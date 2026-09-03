@@ -1,19 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "so101-sim2real"
 version = "0.1.0"
 description = "Sim-to-real reinforcement learning for the SO-101 arm."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12,<3.13"
 dependencies = [
-    "huggingface-hub",
-    "mujoco",
-    "mujoco-mjx",
+    # Known-good GPU stack from /home/brett/venvs/mjx on the RTX 4070.
+    "jax[cuda12]==0.11.0",
+    # JAX 0.11.0 loaded this cuDNN build successfully on this machine.
+    "nvidia-cudnn-cu12==9.24.0.43",
+    "mujoco==3.11.0",
+    "mujoco-mjx==3.11.0",
+    "numpy==2.5.2",
+    "pillow==12.3.0",
 ]
 
 [project.optional-dependencies]
 teleop = [
+    "huggingface-hub",
     "lerobot",
 ]
 
-[tool.uv]
-package = false
+[tool.setuptools]
+# The repository currently runs scripts directly and has no importable project
+# package.  This prevents setuptools from mistaking asset directories for one.
+py-modules = []
