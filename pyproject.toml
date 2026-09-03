@@ -15,6 +15,7 @@ dependencies = [
     "nvidia-cudnn-cu12==9.24.0.43",
     "mujoco==3.11.0",
     "mujoco-mjx==3.11.0",
+    "warp-lang==1.16.0",
     "numpy==2.5.2",
     "pillow==12.3.0",
 ]
@@ -26,6 +27,7 @@ teleop = [
 ]
 
 [tool.setuptools]
-# The repository currently runs scripts directly and has no importable project
-# package.  This prevents setuptools from mistaking asset directories for one.
-py-modules = []
+# Install the environment package while excluding scene assets and tutorials.
+
+[tool.setuptools.packages.find]
+include = ["sim*"]
