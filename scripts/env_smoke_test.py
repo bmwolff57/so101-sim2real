@@ -1,4 +1,4 @@
-"""Run the mechanics-only SO-101 environment under JIT and internal VMAP."""
+"""Run the SO-101 environment under JIT and internal VMAP."""
 
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ def main(args: argparse.Namespace) -> None:
         f"terminated={np.asarray(output.terminated)[:3].tolist()}, "
         f"truncated={np.asarray(output.truncated)[:3].tolist()}"
     )
-    print("[pass] mechanics-only environment smoke test passed")
+    print("[pass] environment smoke test passed")
 
 
 if __name__ == "__main__":

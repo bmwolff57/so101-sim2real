@@ -11,8 +11,11 @@ import mujoco
 import numpy as np
 
 from configs.domain_randomization import NO_RANDOMIZATION, STAGED_RANDOMIZATION
+from scripts.grasp_proxy_debug import closed_pad_midpoint_ik
 from sim.autoreset import select_reset
-from sim.env import Diagnostics, RewardTerms, So101Env, StepOutput, raise_if_nonfinite
+from sim.env import Diagnostics, So101Env, StepOutput, raise_if_nonfinite
+from sim.rewards import RewardIds, compute_reward
+from configs.task_reward import STEP7_REWARD
 from sim.randomization import (
     MAX_ACTION_DELAY_STEPS,
     MAX_IMAGE_DELAY_STEPS,
@@ -188,11 +191,13 @@ class EnvironmentContractTest(unittest.TestCase):
         jax.block_until_ready(altered_obs["proprio"])
         np.testing.assert_array_equal(altered_obs["proprio"], self.observation["proprio"])
 
-    def test_zero_reward_precise_truncation_and_all_physical_axes_step(self) -> None:
+    def test_reward_sum_precise_truncation_and_all_physical_axes_step(self) -> None:
         carry_at_limit = self.carry._replace(step=jnp.full((2,), 199, dtype=jnp.int32))
         _carry, _observation, output = self.step(carry_at_limit, jnp.zeros((2, 6)))
-        np.testing.assert_array_equal(output.reward, jnp.zeros((2,), dtype=jnp.float32))
-        np.testing.assert_array_equal(output.reward_terms.mechanics_only, 0.0)
+        terms = output.reward_terms
+        np.testing.assert_allclose(
+            output.reward, terms.reach + terms.transport + terms.pickup + terms.success
+        )
         self.assertFalse(np.asarray(output.terminated).any())
         self.assertTrue(np.asarray(output.truncated).all())
 
@@ -207,15 +212,87 @@ class EnvironmentContractTest(unittest.TestCase):
     def test_nonfinite_host_boundary_and_autoreset_selection(self) -> None:
         failed = StepOutput(
             reward=jnp.zeros((2,), dtype=jnp.float32),
-            reward_terms=RewardTerms(mechanics_only=jnp.zeros((2,), dtype=jnp.float32)),
+            reward_terms=self.step(self.carry, jnp.zeros((2, 6)))[2].reward_terms,
             terminated=jnp.zeros((2,), dtype=jnp.bool_),
             truncated=jnp.zeros((2,), dtype=jnp.bool_),
-            diagnostics=Diagnostics(physics_finite=jnp.array([True, False])),
+            diagnostics=Diagnostics(
+                jnp.array([True, False]), *([jnp.zeros((2,), dtype=jnp.bool_)] * 11)
+            ),
         )
         with self.assertRaises(FloatingPointError):
             raise_if_nonfinite(failed)
         selected = select_reset(jnp.array([False, True]), jnp.array([[10.0], [20.0]]), jnp.array([[1.0], [2.0]]))
         np.testing.assert_array_equal(selected, jnp.array([[1.0], [20.0]]))
+
+    def test_reward_fixtures_cover_gates_and_success_dwell(self) -> None:
+        """Known simulator-truth states exercise reward math without a rollout."""
+        ids = RewardIds(0, 1, 0, 0, 1)
+
+        class Fixture:
+            def __init__(self, cube, fixed, moving, speed=0.0):
+                self.xpos = jnp.array([[cube, [0.28, 0.15, 0.0]]], dtype=jnp.float32)
+                self.site_xpos = jnp.array([[[0.22, 0.0, 0.08]]], dtype=jnp.float32)
+                self.qvel = jnp.array([[0.0] * 6 + [speed, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=jnp.float32)
+                self.sensordata = jnp.array([[fixed, moving]], dtype=jnp.float32)
+
+        reach = compute_reward(Fixture([0.22, 0.0, 0.021], 0, 0), STEP7_REWARD, ids, jnp.array([False]), jnp.array([0]))
+        self.assertGreater(float(reach.terms.reach[0]), 0.0)
+        self.assertEqual(float(reach.terms.transport[0]), 0.0)
+        pickup = compute_reward(Fixture([0.22, 0.0, 0.05], 1, 1), STEP7_REWARD, ids, jnp.array([False]), jnp.array([0]))
+        self.assertEqual(float(pickup.terms.pickup[0]), 1.0)
+        self.assertGreater(float(pickup.terms.transport[0]), 0.0)
+        repeated = compute_reward(Fixture([0.22, 0.0, 0.05], 1, 1), STEP7_REWARD, ids, jnp.array([True]), jnp.array([0]))
+        self.assertEqual(float(repeated.terms.pickup[0]), 0.0)
+        placed = Fixture([0.28, 0.15, 0.024], 0, 0)
+        result = None
+        for steps in range(5):
+            result = compute_reward(placed, STEP7_REWARD, ids, jnp.array([True]), jnp.array([steps]))
+        self.assertTrue(bool(result.diagnostics.success[0]))
+        self.assertEqual(float(result.terms.success[0]), 10.0)
+        # The bonus/terminal signal is a single transition, not a reward that
+        # repeats if a buggy caller steps again before autoreset.
+        after_terminal = compute_reward(
+            placed, STEP7_REWARD, ids, jnp.array([True]), result.settle_steps
+        )
+        self.assertFalse(bool(after_terminal.diagnostics.success[0]))
+        self.assertEqual(float(after_terminal.terms.success[0]), 0.0)
+
+    def test_jaw_proxy_collision_contract(self) -> None:
+        """Closed pads pinch and lift, while imported arm meshes stay off."""
+        model = mujoco.MjModel.from_xml_path("sim/scene_cube_tub.xml")
+        data = mujoco.MjData(model)
+        cube_joint = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "cube_free")
+        cube_adr = int(model.jnt_qposadr[cube_joint])
+        cube_body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "cube")
+        fixed = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "fixed_jaw_pad")
+        moving = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "moving_jaw_pad")
+        cube_position = np.array([0.22, 0.00, 0.040])
+        closed_target = closed_pad_midpoint_ik(model, cube_position)
+        data.qpos[:6] = closed_target
+        data.ctrl[:] = closed_target
+        data.qpos[cube_adr : cube_adr + 3] = cube_position
+        data.qpos[cube_adr + 3 : cube_adr + 7] = [1.0, 0.0, 0.0, 0.0]
+        mujoco.mj_forward(model, data)
+        self.assertGreater(data.sensordata[0], 0.0)
+        self.assertGreater(data.sensordata[1], 0.0)
+        self.assertEqual(model.geom_contype[fixed], 1)
+        self.assertEqual(model.geom_contype[moving], 1)
+
+        # Establish the closed pinch, then prove that ordinary position
+        # actuators retain it through a 6 cm lift.
+        for _ in range(100):
+            mujoco.mj_step(model, data)
+        lift_target = closed_pad_midpoint_ik(model, cube_position + [0.0, 0.0, 0.06])
+        data.ctrl[:] = lift_target
+        for _ in range(200):
+            mujoco.mj_step(model, data)
+        self.assertGreaterEqual(float(data.xpos[cube_body, 2]), cube_position[2] + 0.04)
+
+        # Imported arm collision meshes remain off, preserving the Step 5
+        # 8 GiB GPU collision-budget decision.
+        arm_meshes = model.geom_group == 3
+        self.assertGreater(int(arm_meshes.sum()), 0)
+        np.testing.assert_array_equal(model.geom_contype[arm_meshes], 0)
 
 
 if __name__ == "__main__":

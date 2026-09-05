@@ -1,9 +1,4 @@
-"""Mechanics-only, Warp-rendered SO-101 MJX environment.
-
-This module deliberately stops before task design: reset is deterministic,
-reward is always zero, and no success/failure condition exists yet.  Its job is
-to prove the JAX carry/observation/action contract with the real scene.
-"""
+"""Warp-rendered SO-101 MJX environment with simulator-only task truth."""
 
 from __future__ import annotations
 
@@ -19,7 +14,9 @@ from mujoco import mjx
 from mujoco.mjx.warp import types as warp_types
 
 from configs.domain_randomization import STAGED_RANDOMIZATION
+from configs.task_reward import STEP7_REWARD, TaskRewardConfig
 from sim.proprio import assemble_proprio
+from sim.rewards import RewardIds, RewardTerms, compute_reward
 from sim.randomization import (
     MAX_ACTION_DELAY_STEPS,
     MAX_IMAGE_DELAY_STEPS,
@@ -55,6 +52,8 @@ class Carry(NamedTuple):
     command_target: jax.Array
     action_history: jax.Array
     camera_history: "CameraHistory"
+    pickup_rewarded: jax.Array
+    settle_steps: jax.Array
 
 
 class CameraHistory(NamedTuple):
@@ -64,12 +63,19 @@ class CameraHistory(NamedTuple):
     overhead: jax.Array
 
 
-class RewardTerms(NamedTuple):
-    mechanics_only: jax.Array
-
-
 class Diagnostics(NamedTuple):
     physics_finite: jax.Array
+    gripper_cube_distance: jax.Array
+    cube_tub_xy_distance: jax.Array
+    cube_linear_speed: jax.Array
+    cube_angular_speed: jax.Array
+    fixed_jaw_contact: jax.Array
+    moving_jaw_contact: jax.Array
+    secure_pickup: jax.Array
+    released: jax.Array
+    contained: jax.Array
+    settled: jax.Array
+    success: jax.Array
 
 
 class StepOutput(NamedTuple):
@@ -119,6 +125,8 @@ class So101Env:
     overhead_camera_id: int
     randomization: RandomizationConfig
     randomization_ids: RandomizationIds
+    reward_config: TaskRewardConfig
+    reward_ids: RewardIds
 
     @classmethod
     def from_scene(
@@ -127,6 +135,7 @@ class So101Env:
         resolution: int = 128,
         scene_path: Path | str = SCENE_PATH,
         randomization: RandomizationConfig = STAGED_RANDOMIZATION,
+        reward_config: TaskRewardConfig = STEP7_REWARD,
     ) -> "So101Env":
         """Construct immutable scene metadata and a Warp render context."""
         if batch_size < 1:
@@ -171,6 +180,15 @@ class So101Env:
             arm_dof_ids=tuple(int(index) for index in qvel_indices),
             actuator_ids=tuple(int(index) for index in actuator_ids),
         )
+        fixed_touch = _named_id(host_model, mujoco.mjtObj.mjOBJ_SENSOR, "fixed_jaw_touch")
+        moving_touch = _named_id(host_model, mujoco.mjtObj.mjOBJ_SENSOR, "moving_jaw_touch")
+        reward_ids = RewardIds(
+            cube_body=cube_body,
+            tub_body=_named_id(host_model, mujoco.mjtObj.mjOBJ_BODY, "tub"),
+            gripper_site=_named_id(host_model, mujoco.mjtObj.mjOBJ_SITE, "gripperframe"),
+            fixed_jaw_touch_sensor=int(host_model.sensor_adr[fixed_touch]),
+            moving_jaw_touch_sensor=int(host_model.sensor_adr[moving_touch]),
+        )
 
         # ``WARP_STAGED`` uses stable staging buffers across JAX retraces.
         # That avoids the duplicate FFI/graph-cache path encountered when
@@ -203,6 +221,8 @@ class So101Env:
             overhead_camera_id=overhead_id,
             randomization=randomization,
             randomization_ids=randomization_ids,
+            reward_config=reward_config,
+            reward_ids=reward_ids,
         )
 
     def _make_data(self, world_keys: jax.Array):
@@ -300,11 +320,13 @@ class So101Env:
             command_target=target,
             action_history=jnp.zeros((self.batch_size, MAX_ACTION_DELAY_STEPS, 6), dtype=jnp.float32),
             camera_history=camera_history,
+            pickup_rewarded=jnp.zeros((self.batch_size,), dtype=jnp.bool_),
+            settle_steps=jnp.zeros((self.batch_size,), dtype=jnp.int32),
         )
         return carry, observation
 
     def step(self, carry: Carry, action: jax.Array) -> tuple[Carry, Observation, StepOutput]:
-        """Apply one 20 Hz control action and return mechanics-only outputs."""
+        """Apply one 20 Hz control action and return the task transition."""
         action = jnp.clip(action.astype(jnp.float32), -1.0, 1.0)
         executed_action, action_history = self._select_executed_action(
             action, carry.action_history, carry.params.action_delay_steps
@@ -330,18 +352,20 @@ class So101Env:
         observation, camera_history = self._apply_image_delay(
             raw_observation, carry.camera_history, carry.params.image_delay_steps
         )
+        reward_result = compute_reward(
+            data, self.reward_config, self.reward_ids,
+            carry.pickup_rewarded, carry.settle_steps,
+        )
         finite = jnp.logical_and(
             jnp.all(jnp.isfinite(data.qpos), axis=-1),
             jnp.all(jnp.isfinite(data.qvel), axis=-1),
         )
         output = StepOutput(
-            reward=jnp.zeros((self.batch_size,), dtype=jnp.float32),
-            reward_terms=RewardTerms(
-                mechanics_only=jnp.zeros((self.batch_size,), dtype=jnp.float32)
-            ),
-            terminated=jnp.zeros((self.batch_size,), dtype=jnp.bool_),
-            truncated=next_step >= MAX_EPISODE_STEPS,
-            diagnostics=Diagnostics(physics_finite=finite),
+            reward=reward_result.reward,
+            reward_terms=reward_result.terms,
+            terminated=reward_result.diagnostics.success,
+            truncated=(next_step >= MAX_EPISODE_STEPS) & ~reward_result.diagnostics.success,
+            diagnostics=Diagnostics(finite, *reward_result.diagnostics),
         )
         return (
             Carry(
@@ -352,6 +376,8 @@ class So101Env:
                 command_target=target,
                 action_history=action_history,
                 camera_history=camera_history,
+                pickup_rewarded=reward_result.pickup_rewarded,
+                settle_steps=reward_result.settle_steps,
             ),
             observation,
             output,

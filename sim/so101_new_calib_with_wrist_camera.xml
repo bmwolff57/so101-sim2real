@@ -123,6 +123,12 @@
                 <geom type="mesh" class="collision" pos="8.32667e-17 -0.000218214 0.000949706" quat="0 1 0 0" mesh="wrist_roll_follower_so101_v1" material="wrist_roll_follower_so101_v1_material"/>
                 <!-- Frame gripperframe -->
                 <site group="3" name="gripperframe" pos="-0.0079 -0.000218121 -0.0981274" quat="0.707107 -0 0.707107 -2.37788e-17"/>
+                <!-- Step 7: inexpensive pinch-contact proxies.  The imported
+                     arm meshes remain non-colliding on the 8 GiB GPU. -->
+                  <geom name="fixed_jaw_pad" type="sphere" size="0.006"
+                      pos="0.00514562 0.02631891 -0.09196293" contype="1" conaffinity="1"
+                      friction="1.2 0.02 0.005" rgba="0.15 0.15 0.15 0.15"/>
+                <site name="fixed_jaw_touch_site" pos="0.00514562 0.02631891 -0.09196293" size="0.030"/>
                 <!-- Link moving_jaw_so101_v1 -->
                 <body name="moving_jaw_so101_v1" pos="0.0202 0.0188 -0.0234" quat="0.707107 0.707107 -1.85362e-08 1.85362e-08">
                   <!-- Joint from gripper to moving_jaw_so101_v1 -->
@@ -131,6 +137,10 @@
                   <!-- Part moving_jaw_so101_v1 -->
                   <geom type="mesh" class="visual" pos="-5.55112e-17 -5.55112e-17 0.0189" quat="1 -0 3.00524e-16 -2.00834e-17" mesh="moving_jaw_so101_v1" material="moving_jaw_so101_v1_material"/>
                   <geom type="mesh" class="collision" pos="-5.55112e-17 -5.55112e-17 0.0189" quat="1 -0 3.00524e-16 -2.00834e-17" mesh="moving_jaw_so101_v1" material="moving_jaw_so101_v1_material"/>
+                  <geom name="moving_jaw_pad" type="sphere" size="0.006"
+                        pos="-0.00048829 -0.0699318 0.04041891" contype="1" conaffinity="1"
+                        friction="1.2 0.02 0.005" rgba="0.15 0.15 0.15 0.15"/>
+                  <site name="moving_jaw_touch_site" pos="-0.00048829 -0.0699318 0.04041891" size="0.030"/>
                 </body>
               </body>
             </body>
@@ -139,6 +149,10 @@
       </body>
     </body>
   </worldbody>
+  <sensor>
+    <touch name="fixed_jaw_touch" site="fixed_jaw_touch_site"/>
+    <touch name="moving_jaw_touch" site="moving_jaw_touch_site"/>
+  </sensor>
   <asset>
     <mesh file="waveshare_mounting_plate_so101_v2.stl"/>
     <mesh file="sts3215_03a_v1.stl"/>
