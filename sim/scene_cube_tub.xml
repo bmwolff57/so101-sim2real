@@ -15,7 +15,15 @@
 
   <asset>
     <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="256" height="1536"/>
-    <material name="table_mat" rgba="0.85 0.75 0.60 1"/>
+    <!-- Texture pixels are deliberately static.  Step 6 selects one of these
+         material IDs per lane through batched geom_matid; MJX/Warp cannot
+         batch texture-pixel data itself. -->
+    <texture name="table_walnut_tex" type="2d" file="assets/textures/table_walnut.png"/>
+    <texture name="table_neutral_tex" type="2d" file="assets/textures/table_neutral_matte.png"/>
+    <texture name="table_taupe_tex" type="2d" file="assets/textures/table_taupe_matte.png"/>
+    <material name="table_mat" texture="table_walnut_tex" texrepeat="1 1" rgba="1 1 1 1"/>
+    <material name="table_neutral_mat" texture="table_neutral_tex" texrepeat="1 1" rgba="1 1 1 1"/>
+    <material name="table_taupe_mat" texture="table_taupe_tex" texrepeat="1 1" rgba="1 1 1 1"/>
     <material name="tub_mat"   rgba="0.35 0.35 0.35 1"/>
     <material name="cube_mat"  rgba="0.90 0.12 0.12 1"/>
   </asset>

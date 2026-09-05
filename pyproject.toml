@@ -30,4 +30,4 @@ teleop = [
 # Install the environment package while excluding scene assets and tutorials.
 
 [tool.setuptools.packages.find]
-include = ["sim*"]
+include = ["sim*", "configs*"]

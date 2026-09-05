@@ -4,8 +4,13 @@ data/
 checkpoints/
 *.mp4
 *.ckpt
+*.egg-info/
 .venv/
 .venv-*/
 venvs/
 .env
 *.png
+!sim/assets/textures/
+!sim/assets/textures/*.png
+!scripts/randomization_samples/
+!scripts/randomization_samples/*.png
